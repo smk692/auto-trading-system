@@ -12,6 +12,8 @@
 
 ## 🎯 시스템 개요
 
+> ⚠️ **프로젝트 상태**: 현재 설계 단계이며, 아래 내용은 구현 예정 사항입니다.
+
 ### 비전
 개인 투자자가 반복적이고 감정적인 매매를 줄이고, **데이터 기반 의사결정**을 자동화합니다. 한국투자증권 API를 시작점으로, 추후 다른 브로커 API로 확장할 수 있는 **모듈형 구조**를 설계합니다.
 
@@ -21,6 +23,14 @@
 - **리스크 관리**: 손실 제한, 보유 종목 제한
 - **모듈성**: API 인터페이스 추상화로 교체 용이
 - **관측성**: 로그와 지표로 투명한 추적
+
+### 기술 스택
+- **언어**: Node.js 20+, TypeScript
+- **패키지 관리**: pnpm
+- **테스트**: Jest
+- **데이터베이스**: PostgreSQL 14+
+- **캐싱**: Redis 7+
+- **메시징**: Kafka (이벤트 스트리밍)
 
 ## 🔄 시스템 FLOW
 
@@ -160,14 +170,15 @@ graph TB
 
 **전략 예시 (이동평균선 + 거래량):**
 
-```python
-# 의사 코드
-if MA_50 > MA_200 and volume > avg_volume * 1.5:
-    signal = "BUY"
-elif MA_50 < MA_200:
-    signal = "SELL"
-else:
-    signal = "HOLD"
+```typescript
+// 의사 코드
+if (MA_50 > MA_200 && volume > avg_volume * 1.5) {
+  signal = "BUY";
+} else if (MA_50 < MA_200) {
+  signal = "SELL";
+} else {
+  signal = "HOLD";
+}
 ```
 
 ### 3. 리스크 관리 흐름
@@ -293,35 +304,35 @@ graph TB
 
 **주요 구현 내용:**
 
-```python
-# BrokerAdapter 인터페이스
-class BrokerAdapter(ABC):
-    @abstractmethod
-    async def get_price(self, symbol: str) -> Price:
-        """현재가 조회"""
-        pass
+```typescript
+// BrokerAdapter 인터페이스
+interface BrokerAdapter {
+  /**
+   * 현재가 조회
+   */
+  getPrice(symbol: string): Promise<Price>;
 
-    @abstractmethod
-    async def send_order(
-        self,
-        symbol: str,
-        side: OrderSide,
-        qty: int,
-        price: Optional[float],
-        order_type: OrderType
-    ) -> Order:
-        """주문 전송"""
-        pass
+  /**
+   * 주문 전송
+   */
+  sendOrder(
+    symbol: string,
+    side: OrderSide,
+    qty: number,
+    price: number | null,
+    orderType: OrderType
+  ): Promise<Order>;
 
-    @abstractmethod
-    async def get_balance(self) -> Balance:
-        """잔고 조회"""
-        pass
+  /**
+   * 잔고 조회
+   */
+  getBalance(): Promise<Balance>;
 
-    @abstractmethod
-    async def get_positions(self) -> List[Position]:
-        """보유 포지션 조회"""
-        pass
+  /**
+   * 보유 포지션 조회
+   */
+  getPositions(): Promise<Position[]>;
+}
 ```
 
 **구현 상세:**
@@ -389,31 +400,38 @@ CREATE INDEX idx_market_bars_symbol_ts ON market_bars (symbol, ts DESC);
 **주요 구현 내용:**
 
 **지표 계산:**
-```python
-# 이동평균선 계산
-def calculate_moving_average(prices: List[float], period: int) -> float:
-    return sum(prices[-period:]) / period
+```typescript
+// 이동평균선 계산
+function calculateMovingAverage(prices: number[], period: number): number {
+  const recentPrices = prices.slice(-period);
+  return recentPrices.reduce((sum, price) => sum + price, 0) / period;
+}
 
-# 거래량 필터
-def volume_filter(current_volume: int, avg_volume: int, threshold: float = 1.5) -> bool:
-    return current_volume > avg_volume * threshold
+// 거래량 필터
+function volumeFilter(
+  currentVolume: number,
+  avgVolume: number,
+  threshold: number = 1.5
+): boolean {
+  return currentVolume > avgVolume * threshold;
+}
 ```
 
 **전략 플러그인 구조:**
-```python
-class Strategy(ABC):
-    def __init__(self, params: StrategyParams):
-        self.params = params
+```typescript
+interface Strategy {
+  readonly params: StrategyParams;
 
-    @abstractmethod
-    async def analyze(self, market_data: MarketData) -> Signal:
-        """시장 데이터 분석 후 신호 생성"""
-        pass
+  /**
+   * 시장 데이터 분석 후 신호 생성
+   */
+  analyze(marketData: MarketData): Promise<Signal>;
 
-    @abstractmethod
-    def get_params_hash(self) -> str:
-        """파라미터 해시 (버전 관리)"""
-        pass
+  /**
+   * 파라미터 해시 (버전 관리)
+   */
+  getParamsHash(): string;
+}
 ```
 
 **PostgreSQL 스키마:**
@@ -457,25 +475,28 @@ strategies:
 **주요 구현 내용:**
 
 **리스크 룰:**
-```python
-class RiskRule(ABC):
-    @abstractmethod
-    async def check(self, context: RiskContext) -> RiskDecision:
-        """리스크 검증"""
-        pass
+```typescript
+interface RiskRule {
+  /**
+   * 리스크 검증
+   */
+  check(context: RiskContext): Promise<RiskDecision>;
+}
 
-class DailyLossLimitRule(RiskRule):
-    def __init__(self, limit_pct: float = -0.02):
-        self.limit_pct = limit_pct
+class DailyLossLimitRule implements RiskRule {
+  constructor(private readonly limitPct: number = -0.02) {}
 
-    async def check(self, context: RiskContext) -> RiskDecision:
-        daily_pnl = context.get_daily_pnl()
-        if daily_pnl < self.limit_pct:
-            return RiskDecision(
-                approved=False,
-                reason=f"일중 손실 한도 초과: {daily_pnl:.2%}"
-            )
-        return RiskDecision(approved=True)
+  async check(context: RiskContext): Promise<RiskDecision> {
+    const dailyPnl = context.getDailyPnl();
+    if (dailyPnl < this.limitPct) {
+      return {
+        approved: false,
+        reason: `일중 손실 한도 초과: ${(dailyPnl * 100).toFixed(2)}%`,
+      };
+    }
+    return { approved: true };
+  }
+}
 ```
 
 **PostgreSQL 스키마:**
@@ -494,21 +515,25 @@ CREATE TABLE risk_events (
 ```
 
 **Kill Switch 구현:**
-```python
-class KillSwitch:
-    def __init__(self):
-        self._active = False
+```typescript
+class KillSwitch {
+  private active = false;
 
-    def activate(self, reason: str):
-        """긴급 정지 활성화"""
-        self._active = True
-        # 1. 신규 주문 차단
-        # 2. 미체결 주문 취소
-        # 3. 알림 발송
-        logger.critical(f"Kill Switch 활성화: {reason}")
+  /**
+   * 긴급 정지 활성화
+   */
+  activate(reason: string): void {
+    this.active = true;
+    // 1. 신규 주문 차단
+    // 2. 미체결 주문 취소
+    // 3. 알림 발송
+    logger.critical(`Kill Switch 활성화: ${reason}`);
+  }
 
-    def is_active(self) -> bool:
-        return self._active
+  isActive(): boolean {
+    return this.active;
+  }
+}
 ```
 
 ### 5. 주문 관리 시스템 (Order Manager)
@@ -566,12 +591,15 @@ CREATE TABLE positions (
 ```
 
 **멱등성 보장 (client_order_id):**
-```python
-def generate_client_order_id(symbol: str, side: str) -> str:
-    """고유 주문 ID 생성"""
-    timestamp = int(time.time() * 1000)
-    random_suffix = secrets.token_hex(4)
-    return f"{symbol}_{side}_{timestamp}_{random_suffix}"
+```typescript
+/**
+ * 고유 주문 ID 생성
+ */
+function generateClientOrderId(symbol: string, side: string): string {
+  const timestamp = Date.now();
+  const randomSuffix = crypto.randomBytes(4).toString("hex");
+  return `${symbol}_${side}_${timestamp}_${randomSuffix}`;
+}
 ```
 
 **Kafka 토픽:**
@@ -590,22 +618,21 @@ def generate_client_order_id(symbol: str, side: str) -> str:
 **주요 구현 내용:**
 
 **구조화 로깅 (JSON):**
-```python
-import structlog
+```typescript
+import { Logger } from "./logger";
 
-logger = structlog.get_logger()
+const logger = new Logger();
 
-# 주문 로그 예시
-logger.info(
-    "order_submitted",
-    correlation_id=correlation_id,
-    client_order_id=client_order_id,
-    symbol=symbol,
-    side=side,
-    qty=qty,
-    price=price,
-    reason="MA50 > MA200, volume spike"
-)
+// 주문 로그 예시
+logger.info("order_submitted", {
+  correlationId,
+  clientOrderId,
+  symbol,
+  side,
+  qty,
+  price,
+  reason: "MA50 > MA200, volume spike",
+});
 ```
 
 **메트릭 수집:**
@@ -677,31 +704,34 @@ CREATE TABLE configs (
 ## 💻 기술 스택
 
 ### Runtime & Language
-- **Python**: 3.12+ (LTS)
-- **패키지 관리**: uv 또는 poetry (잠금파일 필수)
-- **타입/품질**: mypy, ruff, black, bandit
+- **Node.js**: 20+ (LTS)
+- **TypeScript**: 5+ (타입 안정성)
+- **패키지 관리**: pnpm (잠금파일 필수)
+
+### 테스트 & 품질
+- **Jest**: 단위 테스트, 통합 테스트
+- **ESLint**: 코드 품질 검사
+- **Prettier**: 코드 포맷팅
 
 ### 데이터 저장소
 - **PostgreSQL**: 14+ (시계열 데이터, 파티셔닝)
 - **Redis**: 7+ (캐싱, 최근가)
 
-### 스트리밍
+### 메시징 & 스트리밍
 - **Kafka**: 이벤트 스트림 (at-least-once, 멱등 프로듀서)
 - **스키마**: Avro 또는 Protobuf
-
-### 동시성
-- **asyncio**: 이벤트 루프 기반 I/O 바인딩
 
 ### 인프라
 - **Docker**: 슬림 베이스 + distroless 런타임
 - **Docker Compose**: 개발/테스트/실거래 환경 분리
 
 ### 구성 관리
-- **pydantic-settings**: YAML/ENV 파일 로드
+- **dotenv**: 환경 변수 관리
+- **YAML**: 전략 파라미터 외부화
 
 ### 모니터링
-- **구조화 로깅**: structlog
-- **메트릭**: Prometheus (선택사항)
+- **Winston/Pino**: 구조화 로깅
+- **Prometheus**: 메트릭 수집 (선택사항)
 - **알림**: Slack, Email
 
 ## 📊 데이터 모델
@@ -728,11 +758,12 @@ CREATE TABLE configs (
 
 ### 1. 환경 요구사항
 
-- Python 3.12+
-- PostgreSQL 14+
-- Redis 7+
-- Kafka (선택사항, 개발 환경에서는 로컬 큐 사용 가능)
-- Docker & Docker Compose (권장)
+- **Node.js**: 20+ (LTS)
+- **pnpm**: 최신 버전
+- **PostgreSQL**: 14+
+- **Redis**: 7+
+- **Kafka**: (선택사항, 개발 환경에서는 로컬 큐 사용 가능)
+- **Docker & Docker Compose**: (권장)
 
 ### 2. 저장소 클론
 
@@ -744,11 +775,8 @@ cd auto-trading-system
 ### 3. 의존성 설치
 
 ```bash
-# uv 사용 (권장)
-uv sync
-
-# 또는 poetry 사용
-poetry install
+# pnpm 사용 (권장)
+pnpm install
 ```
 
 ### 4. 환경 변수 설정
@@ -799,24 +827,44 @@ SMTP_PASSWORD=your_email_password
 
 ```bash
 # PostgreSQL 스키마 생성
-python scripts/migrate_db.py
+pnpm run migrate
 ```
 
-### 6. 실행
+### 6. 빌드
+
+```bash
+# TypeScript 컴파일
+pnpm run build
+```
+
+### 7. 실행
 
 #### 개발 모드 (페이퍼 트레이딩)
 ```bash
-python main.py --env dev --paper-trading
+pnpm run dev --paper-trading
 ```
 
 #### 프로덕션 모드 (실거래)
 ```bash
-python main.py --env prod
+pnpm run start:prod
 ```
 
 #### Docker로 실행
 ```bash
 docker-compose up -d
+```
+
+### 8. 테스트
+
+```bash
+# 단위 테스트
+pnpm test
+
+# 테스트 커버리지
+pnpm test:cov
+
+# E2E 테스트
+pnpm test:e2e
 ```
 
 ## 📋 시스템 체크리스트
