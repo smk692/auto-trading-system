@@ -63,31 +63,25 @@ describe('MACrossStrategy', () => {
 
   describe('analyze - BUY signals', () => {
     it('should generate BUY signal when short MA crosses above long MA', async () => {
-      // Arrange
-      const marketData = createMarketData(symbol, [
-        // Prices going up, short MA will cross above long MA
-        { close: 60000, volume: 2000000 },
-        { close: 61000, volume: 2000000 },
-        { close: 62000, volume: 2000000 },
-        { close: 63000, volume: 2000000 },
-        { close: 64000, volume: 2000000 },
-        { close: 65000, volume: 2000000 },
-        { close: 66000, volume: 2000000 },
-        { close: 67000, volume: 2000000 },
-        { close: 68000, volume: 2000000 },
-        { close: 69000, volume: 2000000 },
-        { close: 70000, volume: 2000000 },
-        { close: 71000, volume: 2000000 },
-        { close: 72000, volume: 2000000 },
-        { close: 73000, volume: 2000000 },
-        { close: 74000, volume: 2000000 },
-        { close: 75000, volume: 2000000 },
-        { close: 76000, volume: 2000000 },
-        { close: 77000, volume: 2000000 },
-        { close: 78000, volume: 2000000 },
-        { close: 79000, volume: 2000000 },
-        { close: 80000, volume: 2000000 }, // Recent strong uptrend
-      ]);
+      // Arrange - Create clear bullish crossover scenario
+      // First 18 bars: declining trend (short MA < long MA)
+      // Last 3 bars: strong rally (short MA crosses above long MA)
+      const bars: Array<{ close: number; volume: number }> = [];
+
+      // Declining trend: 80000 → 70000 (18 bars)
+      for (let i = 0; i < 18; i++) {
+        bars.push({
+          close: 80000 - i * 500,
+          volume: 2000000,
+        });
+      }
+
+      // Strong rally: rapid price increase (3 bars)
+      bars.push({ close: 75000, volume: 2000000 });
+      bars.push({ close: 82000, volume: 2000000 });
+      bars.push({ close: 88000, volume: 2000000 });
+
+      const marketData = createMarketData(symbol, bars);
 
       // Act
       const signal = await strategy.analyze(marketData);
@@ -118,31 +112,25 @@ describe('MACrossStrategy', () => {
 
   describe('analyze - SELL signals', () => {
     it('should generate SELL signal when short MA crosses below long MA', async () => {
-      // Arrange
-      const marketData = createMarketData(symbol, [
-        // Prices going down, short MA will cross below long MA
-        { close: 80000, volume: 2000000 },
-        { close: 79000, volume: 2000000 },
-        { close: 78000, volume: 2000000 },
-        { close: 77000, volume: 2000000 },
-        { close: 76000, volume: 2000000 },
-        { close: 75000, volume: 2000000 },
-        { close: 74000, volume: 2000000 },
-        { close: 73000, volume: 2000000 },
-        { close: 72000, volume: 2000000 },
-        { close: 71000, volume: 2000000 },
-        { close: 70000, volume: 2000000 },
-        { close: 69000, volume: 2000000 },
-        { close: 68000, volume: 2000000 },
-        { close: 67000, volume: 2000000 },
-        { close: 66000, volume: 2000000 },
-        { close: 65000, volume: 2000000 },
-        { close: 64000, volume: 2000000 },
-        { close: 63000, volume: 2000000 },
-        { close: 62000, volume: 2000000 },
-        { close: 61000, volume: 2000000 },
-        { close: 60000, volume: 2000000 }, // Recent strong downtrend
-      ]);
+      // Arrange - Create clear bearish crossover scenario
+      // First 18 bars: rising trend (short MA > long MA)
+      // Last 3 bars: sharp decline (short MA crosses below long MA)
+      const bars: Array<{ close: number; volume: number }> = [];
+
+      // Rising trend: 60000 → 70000 (18 bars)
+      for (let i = 0; i < 18; i++) {
+        bars.push({
+          close: 60000 + i * 500,
+          volume: 2000000,
+        });
+      }
+
+      // Sharp decline: rapid price decrease (3 bars)
+      bars.push({ close: 66000, volume: 2000000 });
+      bars.push({ close: 58000, volume: 2000000 });
+      bars.push({ close: 50000, volume: 2000000 });
+
+      const marketData = createMarketData(symbol, bars);
 
       // Act
       const signal = await strategy.analyze(marketData);
@@ -180,9 +168,23 @@ describe('MACrossStrategy', () => {
         volumeThreshold: 5000000, // High threshold
       });
 
-      const marketData = createMarketData(symbol, [
-        ...generatePriceData(60000, 80000, 21, 1000000), // Low volume
-      ]);
+      // Create same bullish crossover pattern as BUY test, but with low volume
+      const bars: Array<{ close: number; volume: number }> = [];
+
+      // Declining trend (18 bars)
+      for (let i = 0; i < 18; i++) {
+        bars.push({
+          close: 80000 - i * 500,
+          volume: 1000000, // Low volume
+        });
+      }
+
+      // Strong rally (3 bars) - crossover occurs
+      bars.push({ close: 75000, volume: 1000000 }); // Low volume
+      bars.push({ close: 82000, volume: 1000000 }); // Low volume
+      bars.push({ close: 88000, volume: 1000000 }); // Low volume
+
+      const marketData = createMarketData(symbol, bars);
 
       // Act
       const signal = await strategyWithVolThreshold.analyze(marketData);

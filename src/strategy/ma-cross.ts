@@ -73,10 +73,12 @@ export class MACrossStrategy implements Strategy {
 
     // Get current and previous values for the same time period
     // Since longMA starts later, we need to align the indices
+    // Example: with 21 bars, SMA(5) gives 17 values, SMA(20) gives 2 values
+    // We need to compare the last 2 values of both at the same time points
     const offset = shortMAValues.length - longMAValues.length;
-    const currentShortMA = shortMAValues[shortMAValues.length - 1];
+    const currentShortMA = shortMAValues[offset + longMAValues.length - 1];
     const currentLongMA = longMAValues[longMAValues.length - 1];
-    const previousShortMA = shortMAValues[shortMAValues.length - 2];
+    const previousShortMA = shortMAValues[offset + longMAValues.length - 2];
     const previousLongMA = longMAValues[longMAValues.length - 2];
 
     // Determine crossover
