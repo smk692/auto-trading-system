@@ -36,6 +36,13 @@ describe('RedisClient', () => {
       expect(client).toHaveProperty('set');
       expect(client).toHaveProperty('del');
     });
+
+    it('should accept optional error handler', () => {
+      const errorHandler = jest.fn();
+      client = new RedisClient(mockConfig, errorHandler);
+
+      expect(client).toBeInstanceOf(RedisClient);
+    });
   });
 
   describe('connect', () => {

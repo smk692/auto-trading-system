@@ -10,7 +10,6 @@ import type { EnvConfig } from '@/config';
  */
 export class PostgresClient {
   private pool: Pool | null = null;
-  private client: PoolClient | null = null;
   private connected = false;
 
   constructor(private readonly config: EnvConfig['postgres']) {}
@@ -56,7 +55,6 @@ export class PostgresClient {
     try {
       await this.pool.end();
       this.pool = null;
-      this.client = null;
       this.connected = false;
     } catch (error) {
       throw new Error(`Failed to disconnect from PostgreSQL: ${(error as Error).message}`);
@@ -82,50 +80,27 @@ export class PostgresClient {
   }
 
   /**
-   * Begin a transaction
+   * Execute a callback within a transaction
+   * Automatically commits on success, rolls back on error
+   * Supports concurrent transactions
    */
-  async beginTransaction(): Promise<void> {
+  async withTransaction<T>(callback: (client: PoolClient) => Promise<T>): Promise<T> {
     if (!this.pool) {
       throw new Error('Not connected to PostgreSQL. Call connect() first.');
     }
 
-    if (this.client !== null) {
-      throw new Error('Transaction already in progress');
-    }
-
-    this.client = await this.pool.connect();
-    await this.client.query('BEGIN');
-  }
-
-  /**
-   * Commit a transaction
-   */
-  async commit(): Promise<void> {
-    if (this.client === null) {
-      throw new Error('No transaction in progress');
-    }
+    const client = await this.pool.connect();
 
     try {
-      await this.client.query('COMMIT');
+      await client.query('BEGIN');
+      const result = await callback(client);
+      await client.query('COMMIT');
+      return result;
+    } catch (error) {
+      await client.query('ROLLBACK');
+      throw error;
     } finally {
-      this.client.release();
-      this.client = null;
-    }
-  }
-
-  /**
-   * Rollback a transaction
-   */
-  async rollback(): Promise<void> {
-    if (this.client === null) {
-      throw new Error('No transaction in progress');
-    }
-
-    try {
-      await this.client.query('ROLLBACK');
-    } finally {
-      this.client.release();
-      this.client = null;
+      client.release();
     }
   }
 

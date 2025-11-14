@@ -105,28 +105,72 @@ describe('PostgresClient', () => {
     });
   });
 
-  describe('transaction', () => {
-    it('should begin transaction', async () => {
+  describe('withTransaction', () => {
+    it('should execute callback within transaction and commit', async () => {
       client = new PostgresClient(mockConfig);
       await client.connect();
 
-      await expect(client.beginTransaction()).resolves.not.toThrow();
+      let callbackExecuted = false;
+      const result = await client.withTransaction(async (txClient) => {
+        callbackExecuted = true;
+        const queryResult = await txClient.query('SELECT 1 as value');
+        return queryResult.rows[0];
+      });
+
+      expect(callbackExecuted).toBe(true);
+      expect(result).toBeDefined();
     });
 
-    it('should commit transaction', async () => {
+    it('should rollback transaction on error', async () => {
       client = new PostgresClient(mockConfig);
       await client.connect();
 
-      await client.beginTransaction();
-      await expect(client.commit()).resolves.not.toThrow();
+      await expect(
+        client.withTransaction(async (txClient) => {
+          await txClient.query('SELECT 1');
+          throw new Error('Simulated error');
+        })
+      ).rejects.toThrow('Simulated error');
     });
 
-    it('should rollback transaction', async () => {
+    it('should support multiple concurrent transactions', async () => {
       client = new PostgresClient(mockConfig);
       await client.connect();
 
-      await client.beginTransaction();
-      await expect(client.rollback()).resolves.not.toThrow();
+      // Execute two transactions concurrently
+      const promise1 = client.withTransaction(async (txClient) => {
+        await txClient.query('SELECT 1');
+        return 'tx1';
+      });
+
+      const promise2 = client.withTransaction(async (txClient) => {
+        await txClient.query('SELECT 2');
+        return 'tx2';
+      });
+
+      const results = await Promise.all([promise1, promise2]);
+      expect(results).toEqual(['tx1', 'tx2']);
+    });
+
+    it('should throw error if not connected', async () => {
+      client = new PostgresClient(mockConfig);
+
+      await expect(
+        client.withTransaction(async () => {
+          return 'test';
+        })
+      ).rejects.toThrow('Not connected');
+    });
+
+    it('should return value from callback', async () => {
+      client = new PostgresClient(mockConfig);
+      await client.connect();
+
+      const result = await client.withTransaction(async () => {
+        return { id: 123, name: 'test' };
+      });
+
+      expect(result).toEqual({ id: 123, name: 'test' });
     });
   });
 

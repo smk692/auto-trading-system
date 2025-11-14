@@ -12,7 +12,10 @@ export class RedisClient {
   private client: RedisClientType | null = null;
   private connected = false;
 
-  constructor(private readonly config: EnvConfig['redis']) {}
+  constructor(
+    private readonly config: EnvConfig['redis'],
+    private readonly onError?: (error: Error) => void
+  ) {}
 
   /**
    * Connect to Redis
@@ -29,7 +32,10 @@ export class RedisClient {
     this.client = createClient({ url });
 
     this.client.on('error', (error: Error) => {
-      console.error('Redis Client Error:', error);
+      if (this.onError) {
+        this.onError(error);
+      }
+      // If no error handler provided, Redis client will handle it internally
     });
 
     try {
