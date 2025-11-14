@@ -1,0 +1,74 @@
+# Strategy configurations for auto-trading system
+# Each strategy has a unique ID and configurable parameters
+
+strategies:
+  # Moving Average Crossover Strategy
+  - id: ma-cross-01
+    name: MA Cross 50/200
+    enabled: true
+    description: Golden cross / Death cross strategy using 50-day and 200-day moving averages
+    symbols:
+      - "005930" # Samsung Electronics
+      - "000660" # SK Hynix
+      - "035420" # NAVER
+    params:
+      shortPeriod: 50
+      longPeriod: 200
+      volumeThreshold: 1000000 # Minimum daily volume
+      signalStrength: 0.7 # Confidence threshold (0.0 to 1.0)
+    risk:
+      maxPositionSize: 5000000 # KRW
+      stopLossPercent: 0.05 # 5% stop loss
+      takeProfitPercent: 0.15 # 15% take profit
+
+  # Volume-weighted MA Cross Strategy
+  - id: ma-cross-volume-01
+    name: MA Cross with Volume Confirmation
+    enabled: false
+    description: MA crossover strategy with volume confirmation
+    symbols:
+      - "005930" # Samsung Electronics
+      - "035720" # Kakao
+    params:
+      shortPeriod: 20
+      longPeriod: 50
+      volumeMultiplier: 1.5 # Volume must be 1.5x average
+      signalStrength: 0.8
+    risk:
+      maxPositionSize: 3000000
+      stopLossPercent: 0.03
+      takeProfitPercent: 0.10
+
+  # RSI Mean Reversion Strategy (example for future implementation)
+  - id: rsi-mean-reversion-01
+    name: RSI Mean Reversion
+    enabled: false
+    description: Mean reversion strategy using RSI indicator
+    symbols:
+      - "005930"
+    params:
+      rsiPeriod: 14
+      oversoldLevel: 30
+      overboughtLevel: 70
+      signalStrength: 0.75
+    risk:
+      maxPositionSize: 4000000
+      stopLossPercent: 0.04
+      takeProfitPercent: 0.12
+
+# Global strategy settings
+global:
+  # Maximum number of concurrent positions across all strategies
+  maxTotalPositions: 5
+
+  # Maximum capital allocation per strategy
+  maxCapitalPerStrategy: 10000000 # KRW
+
+  # Minimum time between signals for same symbol (minutes)
+  signalCooldownMinutes: 60
+
+  # Paper trading mode (if true, no real orders are placed)
+  paperTrading: true
+
+  # Backtesting mode
+  backtesting: false

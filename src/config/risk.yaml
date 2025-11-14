@@ -1,0 +1,142 @@
+# Risk management configuration for auto-trading system
+
+# Daily limits
+dailyLimits:
+  # Maximum daily loss percentage (e.g., -0.02 = -2%)
+  maxLossPercent: -0.02
+
+  # Maximum daily profit percentage (for taking profits)
+  maxProfitPercent: 0.10
+
+  # Maximum number of trades per day
+  maxTrades: 20
+
+  # Maximum number of losses in a row before pausing
+  maxConsecutiveLosses: 3
+
+# Position limits
+positionLimits:
+  # Maximum number of open positions
+  maxPositions: 5
+
+  # Maximum position weight as percentage of portfolio
+  maxPositionWeightPercent: 0.20 # 20%
+
+  # Maximum concentration in single symbol
+  maxConcentrationPercent: 0.30 # 30%
+
+  # Minimum position value (KRW)
+  minPositionValue: 100000
+
+  # Maximum position value (KRW)
+  maxPositionValue: 10000000
+
+# Order limits
+orderLimits:
+  # Maximum order size (KRW)
+  maxOrderSize: 10000000
+
+  # Maximum number of pending orders
+  maxPendingOrders: 10
+
+  # Order timeout (seconds)
+  orderTimeoutSeconds: 30
+
+# Portfolio limits
+portfolioLimits:
+  # Maximum drawdown before activating kill switch
+  maxDrawdownPercent: -0.10 # -10%
+
+  # Minimum cash reserve percentage
+  minCashReservePercent: 0.10 # 10%
+
+  # Maximum leverage (1.0 = no leverage)
+  maxLeverage: 1.0
+
+# Risk rules configuration
+rules:
+  # Daily loss limit rule
+  - id: daily-loss-limit
+    enabled: true
+    severity: CRITICAL
+    action: ACTIVATE_KILL_SWITCH
+
+  # Position count limit rule
+  - id: position-count-limit
+    enabled: true
+    severity: WARNING
+    action: BLOCK_TRADING
+
+  # Position weight limit rule
+  - id: position-weight-limit
+    enabled: true
+    severity: WARNING
+    action: BLOCK_TRADING
+
+  # Concentration limit rule
+  - id: concentration-limit
+    enabled: true
+    severity: WARNING
+    action: BLOCK_TRADING
+
+  # Drawdown limit rule
+  - id: drawdown-limit
+    enabled: true
+    severity: CRITICAL
+    action: ACTIVATE_KILL_SWITCH
+
+  # Cash reserve rule
+  - id: cash-reserve
+    enabled: true
+    severity: WARNING
+    action: BLOCK_TRADING
+
+  # Consecutive loss rule
+  - id: consecutive-loss
+    enabled: true
+    severity: WARNING
+    action: WARN
+
+# Kill switch configuration
+killSwitch:
+  # Auto-activate on critical rule violations
+  autoActivate: true
+
+  # Require manual reset after activation
+  requireManualReset: true
+
+  # Cancel all orders on activation
+  cancelAllOrders: true
+
+  # Close all positions on activation (dangerous!)
+  closeAllPositions: false
+
+# Alert configuration
+alerts:
+  # Send alerts for risk events
+  enableAlerts: true
+
+  # Minimum severity level for alerts
+  minSeverity: WARNING # INFO, WARNING, CRITICAL
+
+  # Alert channels
+  channels:
+    - slack
+    - email
+
+  # Alert cooldown to prevent spam (minutes)
+  cooldownMinutes: 5
+
+# Monitoring
+monitoring:
+  # Calculate risk metrics interval (seconds)
+  metricsIntervalSeconds: 60
+
+  # Log risk events
+  logRiskEvents: true
+
+  # Generate daily risk reports
+  dailyReports: true
+
+  # Report time (24-hour format)
+  reportTime: "18:00"
