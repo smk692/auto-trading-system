@@ -184,6 +184,10 @@ cp .env.example .env
 # - Database credentials
 # - Redis/Kafka connection strings
 
+# Set up Docker infrastructure (PostgreSQL, Redis, Kafka)
+chmod +x scripts/docker-setup.sh
+./scripts/docker-setup.sh
+
 # Run database migrations
 pnpm run migrate
 
@@ -195,6 +199,167 @@ pnpm test
 
 # Start in development mode (paper trading)
 pnpm run dev --paper-trading
+```
+
+### Docker Infrastructure Setup
+
+This project uses Docker Compose to manage infrastructure dependencies (PostgreSQL, Redis, Kafka). All data is persisted in local volumes.
+
+#### Infrastructure Services
+
+**Core Services** (Always Running):
+- **PostgreSQL 14**: Primary database (port 5432)
+- **Redis 7**: Cache layer (port 6379)
+- **Kafka**: Event streaming (port 9092)
+- **Zookeeper**: Kafka coordination (port 2181)
+
+**Development Tools** (Optional, use `--profile dev`):
+- **pgAdmin**: PostgreSQL admin UI (port 5050)
+- **Kafka UI**: Kafka monitoring (port 8080)
+- **Redis Commander**: Redis admin UI (port 8081)
+
+#### Quick Start
+
+```bash
+# Start core infrastructure
+docker-compose up -d
+
+# Start with development tools
+docker-compose --profile dev up -d
+
+# View logs
+docker-compose logs -f
+
+# Stop all services
+docker-compose down
+
+# Stop and remove volumes (⚠️ deletes all data)
+docker-compose down -v
+```
+
+#### Using the Setup Script
+
+The `scripts/docker-setup.sh` script automates infrastructure setup:
+
+```bash
+# Make script executable
+chmod +x scripts/docker-setup.sh
+
+# Run setup
+./scripts/docker-setup.sh
+```
+
+**What the script does**:
+1. Checks for `.env` file (copies from `.env.example` if missing)
+2. Creates data directories with proper permissions
+3. Starts Docker containers
+4. Waits for services to be healthy
+5. Verifies each service is ready
+
+#### Data Persistence
+
+All data is stored in local `./data/` directory with bind mounts:
+
+```
+data/
+├── postgres/        # PostgreSQL data files
+├── redis/          # Redis persistence files
+├── kafka/          # Kafka data files
+├── zookeeper/      # Zookeeper data and logs
+│   ├── data/
+│   └── log/
+└── pgadmin/        # pgAdmin configuration
+```
+
+**Important Notes**:
+- The `data/` directory is in `.gitignore` (never commit data)
+- Each service has its own volume for data isolation
+- Volumes persist after `docker-compose down` (use `-v` flag to remove)
+
+#### Service Health Checks
+
+All services have health checks configured:
+
+```bash
+# Check service health
+docker-compose ps
+
+# Expected output:
+# NAME                    STATUS
+# auto-trading-postgres   Up (healthy)
+# auto-trading-redis      Up (healthy)
+# auto-trading-kafka      Up (healthy)
+# auto-trading-zookeeper  Up
+```
+
+#### Common Docker Commands
+
+```bash
+# View running containers
+docker-compose ps
+
+# View logs for specific service
+docker-compose logs -f postgres
+docker-compose logs -f kafka
+
+# Restart a service
+docker-compose restart redis
+
+# Execute command in container
+docker-compose exec postgres psql -U trading_user -d trading_db
+docker-compose exec redis redis-cli -a redis_password
+
+# Check Kafka topics
+docker-compose exec kafka kafka-topics --list --bootstrap-server localhost:9092
+
+# Stop specific service
+docker-compose stop kafka
+
+# Rebuild and restart services
+docker-compose up -d --build
+```
+
+#### Troubleshooting Docker
+
+**Port conflicts**:
+```bash
+# Check if ports are in use
+lsof -i :5432  # PostgreSQL
+lsof -i :6379  # Redis
+lsof -i :9092  # Kafka
+
+# Change ports in .env file if needed
+```
+
+**Permission issues**:
+```bash
+# Fix data directory permissions
+sudo chown -R $USER:$USER data/
+chmod -R 755 data/
+```
+
+**Services not starting**:
+```bash
+# Check logs for errors
+docker-compose logs postgres
+docker-compose logs kafka
+
+# Remove containers and volumes, start fresh
+docker-compose down -v
+rm -rf data/*
+./scripts/docker-setup.sh
+```
+
+**Kafka connection issues**:
+```bash
+# Verify Zookeeper is running first
+docker-compose ps zookeeper
+
+# Wait longer for Kafka to start (can take 30-60 seconds)
+docker-compose logs -f kafka
+
+# Test Kafka connection
+docker-compose exec kafka kafka-broker-api-versions --bootstrap-server localhost:9092
 ```
 
 ### Git Branching Strategy
@@ -214,6 +379,423 @@ docs(#issue): Update documentation
 refactor(#issue): Code refactoring
 test(#issue): Add or update tests
 ```
+
+## Test-Driven Development (TDD)
+
+### TDD Philosophy
+
+This project **STRICTLY FOLLOWS TDD (Test-Driven Development)** principles. All code must be written using the Red-Green-Refactor cycle.
+
+**⚠️ CRITICAL RULE**: Write tests BEFORE writing implementation code. No exceptions.
+
+### TDD Cycle: Red-Green-Refactor
+
+```
+┌─────────────────────────────────────────────┐
+│         TDD Development Cycle               │
+├─────────────────────────────────────────────┤
+│                                             │
+│  1️⃣  RED: Write a Failing Test              │
+│      ↓                                      │
+│      • Write test for new functionality    │
+│      • Test MUST fail (no implementation)  │
+│      • Verify test failure is meaningful   │
+│                                             │
+│  2️⃣  GREEN: Make the Test Pass              │
+│      ↓                                      │
+│      • Write minimal code to pass test     │
+│      • Don't optimize yet                  │
+│      • All tests must pass                 │
+│                                             │
+│  3️⃣  REFACTOR: Improve the Code             │
+│      ↓                                      │
+│      • Clean up implementation             │
+│      • Remove duplication                  │
+│      • Improve design                      │
+│      • All tests still pass                │
+│                                             │
+│  ↻ REPEAT for next feature                 │
+│                                             │
+└─────────────────────────────────────────────┘
+```
+
+### TDD Rules (The Three Laws)
+
+1. **First Law**: You may not write production code until you have written a failing unit test
+2. **Second Law**: You may not write more of a unit test than is sufficient to fail (compilation failures are failures)
+3. **Third Law**: You may not write more production code than is sufficient to pass the currently failing test
+
+### TDD Workflow Examples
+
+#### Example 1: Implementing a Strategy
+
+```typescript
+// ❌ WRONG: Writing implementation first
+// src/strategy/ma-cross.ts
+export class MACrossStrategy {
+  analyze(data: MarketData): Signal {
+    // Implementation without tests
+  }
+}
+
+// ✅ CORRECT: Writing test first
+// tests/unit/strategy/ma-cross.test.ts
+describe('MACrossStrategy', () => {
+  describe('analyze', () => {
+    it('should generate BUY signal when MA50 crosses above MA200', () => {
+      // 1. Arrange
+      const strategy = new MACrossStrategy({ short: 50, long: 200 });
+      const marketData = createMockMarketData({
+        ma50: 105,
+        ma200: 100,
+        volume: 1000000
+      });
+
+      // 2. Act
+      const signal = strategy.analyze(marketData);
+
+      // 3. Assert
+      expect(signal.direction).toBe('BUY');
+      expect(signal.strength).toBeGreaterThan(0.5);
+      expect(signal.reason).toContain('MA50 crossed above MA200');
+    });
+
+    it('should generate SELL signal when MA50 crosses below MA200', () => {
+      // Test implementation...
+    });
+
+    it('should generate HOLD signal when no crossover occurs', () => {
+      // Test implementation...
+    });
+  });
+});
+
+// THEN implement the actual strategy to make tests pass
+```
+
+#### Example 2: Implementing Risk Rules
+
+```typescript
+// ✅ CORRECT: Test-first approach
+// tests/unit/risk/daily-loss-limit.test.ts
+describe('DailyLossLimitRule', () => {
+  let rule: DailyLossLimitRule;
+  let mockContext: RiskContext;
+
+  beforeEach(() => {
+    rule = new DailyLossLimitRule(-0.02); // -2% limit
+    mockContext = createMockRiskContext();
+  });
+
+  it('should approve when daily loss is within limit', async () => {
+    mockContext.getDailyPnl.mockReturnValue(-0.01); // -1%
+
+    const decision = await rule.check(mockContext);
+
+    expect(decision.approved).toBe(true);
+  });
+
+  it('should reject when daily loss exceeds limit', async () => {
+    mockContext.getDailyPnl.mockReturnValue(-0.03); // -3%
+
+    const decision = await rule.check(mockContext);
+
+    expect(decision.approved).toBe(false);
+    expect(decision.reason).toContain('daily loss limit exceeded');
+  });
+
+  it('should approve when in profit', async () => {
+    mockContext.getDailyPnl.mockReturnValue(0.05); // +5%
+
+    const decision = await rule.check(mockContext);
+
+    expect(decision.approved).toBe(true);
+  });
+});
+
+// THEN implement DailyLossLimitRule to satisfy tests
+```
+
+### Test Coverage Requirements
+
+- **Minimum Coverage**: 80% overall
+- **Critical Paths**: 100% coverage required for:
+  - Risk management rules
+  - Order execution logic
+  - Position calculations
+  - Authentication/authorization
+  - Financial calculations
+
+### Testing Pyramid
+
+```
+        ┌─────────────┐
+        │   E2E Tests │  ← Few, slow, expensive
+        │   (10-20%)  │
+        ├─────────────┤
+        │ Integration │  ← Some, moderate speed
+        │   (30-40%)  │
+        ├─────────────┤
+        │ Unit Tests  │  ← Many, fast, cheap
+        │   (50-60%)  │
+        └─────────────┘
+```
+
+### Test Organization
+
+```
+tests/
+├── unit/                          # Fast, isolated tests
+│   ├── broker/
+│   │   ├── kis-adapter.test.ts
+│   │   └── auth.test.ts
+│   ├── strategy/
+│   │   ├── ma-cross.test.ts
+│   │   └── indicators/
+│   │       ├── ma.test.ts
+│   │       └── volume.test.ts
+│   ├── risk/
+│   │   ├── daily-loss-limit.test.ts
+│   │   ├── position-limit.test.ts
+│   │   └── kill-switch.test.ts
+│   └── order/
+│       ├── order-manager.test.ts
+│       └── position-tracker.test.ts
+│
+├── integration/                   # Tests with real dependencies
+│   ├── database/
+│   │   ├── postgres.test.ts
+│   │   └── redis.test.ts
+│   ├── kafka/
+│   │   └── event-flow.test.ts
+│   └── api/
+│       └── kis-api.test.ts
+│
+└── e2e/                          # End-to-end scenarios
+    ├── trading-flow.test.ts
+    ├── risk-management.test.ts
+    └── data-collection.test.ts
+```
+
+### Testing Best Practices
+
+#### 1. Use AAA Pattern (Arrange-Act-Assert)
+
+```typescript
+it('should calculate position profit correctly', () => {
+  // Arrange - Set up test data
+  const position = new Position({
+    symbol: 'AAPL',
+    qty: 100,
+    avgPrice: 150.00
+  });
+
+  // Act - Execute the behavior
+  const profit = position.calculateProfit(155.00);
+
+  // Assert - Verify the result
+  expect(profit).toBe(500.00);
+});
+```
+
+#### 2. Test One Thing at a Time
+
+```typescript
+// ✅ GOOD: Each test verifies one specific behavior
+it('should reject order when daily loss limit exceeded', async () => {
+  // Test only daily loss limit rule
+});
+
+it('should reject order when position count limit exceeded', async () => {
+  // Test only position count rule
+});
+
+// ❌ BAD: Testing multiple things
+it('should reject order when limits exceeded', async () => {
+  // Testing multiple rules at once - hard to debug
+});
+```
+
+#### 3. Use Descriptive Test Names
+
+```typescript
+// ✅ GOOD: Clear, descriptive names
+it('should generate BUY signal when MA50 crosses above MA200 with high volume', () => {});
+it('should calculate realized PnL correctly after partial fill', () => {});
+it('should refresh access token when expired', () => {});
+
+// ❌ BAD: Vague names
+it('should work', () => {});
+it('test1', () => {});
+it('handles data', () => {});
+```
+
+#### 4. Mock External Dependencies
+
+```typescript
+// Mock broker API calls
+jest.mock('@/broker/kis/api-client');
+
+describe('OrderManager', () => {
+  it('should submit order to broker API', async () => {
+    // Arrange
+    const mockApiClient = {
+      sendOrder: jest.fn().mockResolvedValue({ orderId: '123' })
+    };
+    const orderManager = new OrderManager(mockApiClient);
+
+    // Act
+    const result = await orderManager.submitOrder({
+      symbol: 'AAPL',
+      side: 'BUY',
+      qty: 100
+    });
+
+    // Assert
+    expect(mockApiClient.sendOrder).toHaveBeenCalledWith({
+      symbol: 'AAPL',
+      side: 'BUY',
+      qty: 100
+    });
+    expect(result.orderId).toBe('123');
+  });
+});
+```
+
+#### 5. Test Edge Cases and Error Conditions
+
+```typescript
+describe('Position', () => {
+  // Happy path
+  it('should calculate profit when price increases', () => {});
+
+  // Edge cases
+  it('should handle zero quantity', () => {});
+  it('should handle negative price (error)', () => {});
+  it('should handle partial fills', () => {});
+
+  // Error conditions
+  it('should throw error when quantity is negative', () => {
+    expect(() => {
+      new Position({ qty: -100 });
+    }).toThrow('Quantity cannot be negative');
+  });
+});
+```
+
+### TDD in Practice: Step-by-Step
+
+When implementing a new feature, follow these steps:
+
+1. **Understand the Requirement**
+   - Read PRD/user story
+   - Identify acceptance criteria
+   - Plan test cases
+
+2. **Write Test Cases**
+   - List all scenarios (happy path, edge cases, errors)
+   - Start with simplest test case
+   - Write test that fails
+
+3. **Implement Minimum Code**
+   - Write just enough code to pass the test
+   - Don't worry about optimization
+   - Run tests (should pass)
+
+4. **Refactor**
+   - Clean up code
+   - Remove duplication
+   - Improve naming
+   - Run tests (should still pass)
+
+5. **Repeat**
+   - Move to next test case
+   - Continue cycle until feature complete
+
+### Running Tests
+
+```bash
+# Run all tests
+pnpm test
+
+# Run tests in watch mode (TDD mode)
+pnpm test:watch
+
+# Run specific test file
+pnpm test ma-cross.test.ts
+
+# Run tests with coverage
+pnpm test:coverage
+
+# Run only unit tests
+pnpm test:unit
+
+# Run integration tests
+pnpm test:integration
+
+# Run E2E tests
+pnpm test:e2e
+```
+
+### Continuous Integration
+
+Every commit triggers:
+1. ✅ Linting (ESLint)
+2. ✅ Type checking (TypeScript)
+3. ✅ All tests (unit + integration + e2e)
+4. ✅ Coverage check (>80%)
+5. ✅ Build verification
+
+**Merge blockers**:
+- Any test failure
+- Coverage below 80%
+- Linting errors
+- Type errors
+
+### TDD Benefits for This Project
+
+1. **Financial Safety**: Bugs in trading systems = money loss. TDD prevents this.
+2. **Confidence in Refactoring**: Can safely refactor with comprehensive test suite
+3. **Living Documentation**: Tests document how code should behave
+4. **Faster Debugging**: When tests fail, you know exactly what broke
+5. **Better Design**: TDD encourages modular, testable code
+
+### Common TDD Mistakes to Avoid
+
+❌ **Writing tests after implementation**
+- Defeats the purpose of TDD
+- Tests become validation, not specification
+
+❌ **Testing implementation details**
+- Test behavior, not internal structure
+- Tests should survive refactoring
+
+❌ **Skipping refactor step**
+- Leads to technical debt
+- Code becomes messy over time
+
+❌ **Writing integration tests first**
+- Start with unit tests
+- Integration tests are slower
+
+❌ **Not running tests frequently**
+- Run tests after every small change
+- Use watch mode during development
+
+### TDD Checklist for AI Assistants
+
+Before implementing any feature:
+
+- [ ] Have I written the test first?
+- [ ] Does the test fail for the right reason?
+- [ ] Did I write minimal code to pass the test?
+- [ ] Did I refactor while keeping tests green?
+- [ ] Are edge cases covered?
+- [ ] Are error conditions tested?
+- [ ] Is test coverage above 80%?
+- [ ] Are tests fast and isolated?
+- [ ] Do test names clearly describe behavior?
+- [ ] Can I explain what this test proves?
 
 ## Code Structure (Planned)
 
