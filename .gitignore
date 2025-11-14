@@ -53,7 +53,6 @@ coverage/
 *.swp
 *.swo
 *~
-.DS_Store
 
 # ===================================
 # Docker Volumes & Data

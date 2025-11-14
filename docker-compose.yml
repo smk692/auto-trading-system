@@ -12,6 +12,20 @@ services:
       POSTGRES_PASSWORD: ${DB_PASSWORD:-trading_password}
       POSTGRES_INITDB_ARGS: "-E UTF8 --locale=C"
       TZ: Asia/Seoul
+    command: >
+      postgres
+      -c shared_preload_libraries=pg_stat_statements
+      -c pg_stat_statements.track=all
+      -c pg_stat_statements.max=10000
+      -c shared_buffers=256MB
+      -c max_connections=100
+      -c effective_cache_size=1GB
+      -c maintenance_work_mem=64MB
+      -c checkpoint_completion_target=0.9
+      -c wal_buffers=16MB
+      -c default_statistics_target=100
+      -c random_page_cost=1.1
+      -c effective_io_concurrency=200
     ports:
       - "${DB_PORT:-5432}:5432"
     volumes:
@@ -31,12 +45,14 @@ services:
     container_name: auto-trading-redis
     restart: unless-stopped
     command: redis-server --appendonly yes --requirepass ${REDIS_PASSWORD:-redis_password}
+    environment:
+      REDIS_PASSWORD: ${REDIS_PASSWORD:-redis_password}
     ports:
       - "${REDIS_PORT:-6379}:6379"
     volumes:
       - redis_data:/data
     healthcheck:
-      test: ["CMD", "redis-cli", "--raw", "incr", "ping"]
+      test: ["CMD", "sh", "-c", "redis-cli -a $$REDIS_PASSWORD ping | grep PONG"]
       interval: 10s
       timeout: 5s
       retries: 5
@@ -85,10 +101,19 @@ services:
     volumes:
       - kafka_data:/var/lib/kafka/data
     healthcheck:
-      test: ["CMD", "kafka-broker-api-versions", "--bootstrap-server", "localhost:9092"]
-      interval: 10s
+      test: ["CMD-SHELL", "kafka-broker-api-versions --bootstrap-server localhost:9092 && kafka-topics --bootstrap-server localhost:9092 --list"]
+      interval: 15s
       timeout: 10s
-      retries: 5
+      retries: 10
+      start_period: 40s
+    deploy:
+      resources:
+        limits:
+          cpus: '2'
+          memory: 2G
+        reservations:
+          cpus: '1'
+          memory: 1G
     networks:
       - trading-network
 
@@ -147,43 +172,22 @@ services:
       - dev
 
 # Persistent volumes
+# Using named volumes for better portability and avoiding permission issues
+# Data is stored in Docker's volume directory (usually /var/lib/docker/volumes/)
+# To backup: docker run --rm -v postgres_data:/data -v $(pwd):/backup alpine tar czf /backup/postgres_backup.tar.gz /data
 volumes:
   postgres_data:
     driver: local
-    driver_opts:
-      type: none
-      o: bind
-      device: ./data/postgres
   redis_data:
     driver: local
-    driver_opts:
-      type: none
-      o: bind
-      device: ./data/redis
   kafka_data:
     driver: local
-    driver_opts:
-      type: none
-      o: bind
-      device: ./data/kafka
   zookeeper_data:
     driver: local
-    driver_opts:
-      type: none
-      o: bind
-      device: ./data/zookeeper/data
   zookeeper_log:
     driver: local
-    driver_opts:
-      type: none
-      o: bind
-      device: ./data/zookeeper/log
   pgadmin_data:
     driver: local
-    driver_opts:
-      type: none
-      o: bind
-      device: ./data/pgadmin
 
 # Network
 networks:
