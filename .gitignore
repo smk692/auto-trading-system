@@ -57,7 +57,7 @@ coverage/
 # ===================================
 # Docker Volumes & Data
 # ===================================
-data/
+/data/
 !data/.gitkeep
 
 # Docker Compose override
